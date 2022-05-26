@@ -8,8 +8,9 @@ from sklearn.neighbors import NearestNeighbors
 
 def main():
     print('Item-Item Based Collaborative Filtering Recommender: \n')
+
     # Data selection and processing
-    dframe = pd.read_json('reviews_Health_and_Personal_Care_5.json', lines=True)
+    dframe = pd.read_json('reviews_Toys_and_Games_5.json', lines=True)
 
     # Drop the columns that I am not using in this algorithm
     dframe = dframe.drop(
@@ -45,17 +46,19 @@ def main():
         row_names = [i[0] for i in rated]
         rows_indexes[i] = index
         user_items_rated[i] = row_names
+
     # User item table
     pivot_table = train_data.pivot_table(values=['overall'], index=['reviewerID'], columns='asin').fillna(0)
     pivot_table = pivot_table.apply(np.sign)
-    print(pivot_table)
+
     # Nearest Neighbor Recommender
     n = 5
     cosine_nn = NearestNeighbors(n_neighbors=n, algorithm='brute', metric='cosine')
     item_cosine_nn_fit = cosine_nn.fit(pivot_table.T.values)
-    # item indices give the index of the actual item
 
+    # item indices give the index of the actual item
     item_distances, item_indices = item_cosine_nn_fit.kneighbors(pivot_table.T.values)
+
     # The Predictions
     item_distances = 1 - item_distances
     predictions = item_distances.T.dot(pivot_table.T.values) / np.array([np.abs(item_distances.T).sum(axis=1)]).T
@@ -79,37 +82,39 @@ def main():
 
     # Item Based Recommender
     items = {}
-    print(range(len(pivot_table.T.index)))
     for i in range(len(pivot_table.T.index)):
         item_index = item_indices[i]
         col_names = pivot_table.T.index[item_index].tolist()
         items[pivot_table.T.index[i]] = col_names
 
-    # Top recommendations_list
-    top_recommendations_list = {}
-    for userID, idx in rows_indexes.items():
-        # indices for rated items
-        item_index = [j for i in item_indices[idx] for j in i]
-        # distances for rated items
-        item_dist = [j for i in item_distances[idx] for j in i]
+    # Top recommendations
+    top_recommendations = {}
+    for u_id, index in rows_indexes.items():
+        # indices for all the items rated
+        item_index = [j for i in item_indices[index] for j in i]
+
+        # distances for all the items rated
+        item_dist = [j for i in item_distances[index] for j in i]
         combine = list(zip(item_dist, item_index))
+
         # filtering out the items that have been rated
-        dictionary = {i: d for d, i in combine if i not in idx}
-        zip_items = list(zip(dictionary.keys(), dictionary.values()))
-        # similarity scores from the most similar to the least similar
-        sort = sorted(zip_items, key=lambda x: x[1])
-        recommendations_list = [(pivot_table.columns[i], d) for i, d in sort]
-        top_recommendations_list[userID] = recommendations_list
+        dictionary = {i: d for d, i in combine if i not in index}
+        zipped = list(zip(dictionary.keys(), dictionary.values()))
+
+        # list the similarity scores from the most similar to the least similar
+        sort = sorted(zipped, key=lambda x: x[1])
+        recommendations = [(pivot_table.columns[i], d) for i, d in sort]
+        top_recommendations[u_id] = recommendations
 
     # Making a 10-item list of recommendations_list to all users
     def recommendations(user):
         to_file = '\n\n' + user + ' - ' + str(user_items_rated[user])
         users_recommendations.write(to_file)
         count = 0
-        for a, b in top_recommendations_list.items():
+        for a, b in top_recommendations.items():
             if user == a:
                 for j in b[:10]:
-                    to_file = '\n{} with similarity: {:.4f}'.format(j[0], 1 - j[1])
+                    to_file = '\n{} has similarity: {:.4f}'.format(j[0], 1 - j[1])
                     users_recommendations.write(to_file)
                     # Check if training data item in list of testing list items
                     if j[0] in test_data_user_items.get(user):
@@ -125,7 +130,7 @@ def main():
     conversion_rate = 0
     for user in users:
         users_counter += 1
-        count_precision, count_recall = recommendations_list(user)
+        count_precision, count_recall = recommendations(user)
         sum_precision += count_precision
         sum_recall += count_recall
         if count_precision > 0:
